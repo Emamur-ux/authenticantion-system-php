@@ -1,7 +1,12 @@
 <?php
+
 session_start();
 
-// Capturing Text Data
+include_once "../database/env.php";
+
+
+// ================= TEXT DATA =================
+
 $title             = $_REQUEST['title'];
 $job_type          = $_REQUEST['job_type'];
 $cta_text          = $_REQUEST['cta_text'];
@@ -13,68 +18,199 @@ $clients           = $_REQUEST['clients'];
 $projects          = $_REQUEST['projects'];
 
 
+// ================= CHECK OLD BANNER =================
 
-// Capturing File Data
+$query = "SELECT * FROM banners";
+
+$res = mysqli_query($db, $query);
+
+if(mysqli_num_rows($res) > 0){
+
+    $oldBanner = mysqli_fetch_assoc($res);
+
+    // ================= DELETE OLD CV =================
+
+    $cvDelete = '../' . $oldBanner['cv'];
+
+    if($oldBanner['cv'] && file_exists($cvDelete)){
+
+        unlink($cvDelete);
+
+    }
+
+
+    // ================= DELETE OLD IMAGE =================
+
+    $imgDelete = '../' . $oldBanner['image'];
+
+    if($oldBanner['image'] && file_exists($imgDelete)){
+
+        unlink($imgDelete);
+
+    }
+
+
+    // ================= DELETE OLD DATABASE DATA =================
+
+    $query = "DELETE FROM banners";
+
+    mysqli_query($db, $query);
+
+}
+
+
+// ================= FILE DATA =================
+
 $cv    = $_FILES['cv'];
 $image = $_FILES['image'];
-$errors =[];
-$cvExt = null;
 
-/**
- * For Debugging: 
- * Uncomment the lines below to see the structure of your uploaded files
- */
-/*
-echo "<pre>";
-print_r($_FILES);
-echo "</pre>";
-*/
-#
+$errors = [];
+
+$cvExt  = null;
+$imgExt = null;
 
 
+// ================= CV VALIDATION =================
 
+if($cv['size'] > 0){
 
-if ($cv['size'] > 0) {
-    $cvPath = (pathinfo($cv['name']));
-    $cvExt = $cvPath['extension'];
+    $cvInfo = pathinfo($cv['name']);
 
-    if ($cvExt != 'pdf' && $cvExt != 'jpg') {
-        $errors['cv_error'] = "File not supported. Supported files are pdf or jpg.";
+    $cvExt = strtolower($cvInfo['extension']);
+
+    if($cvExt != 'pdf' && $cvExt != 'jpg'){
+
+        $errors['cv_error'] = "File not supported. Only PDF or JPG allowed.";
+
     }
+
 }
 
 
+// ================= IMAGE VALIDATION =================
 
-// 265406540
-if ($image['size'] > 0) {
-    $imgPath = pathinfo($image['name']);
-    $imgExt = $imgPath['extension'];
+if($image['size'] > 0){
+
+    $imgInfo = pathinfo($image['name']);
+
+    $imgExt = strtolower($imgInfo['extension']);
+
     $supportedTypes = ['jpg', 'png', 'webp'];
 
-    if (!in_array($imgExt, $supportedTypes)) {
-        $errors['image_error'] = "Image not supported. Supported types are " . join(", ", $supportedTypes);
-    } else if (($image['size'] / 1000) > 2000) {
-        $errors['image_error'] = "img should be around 200kb";
+    if(!in_array($imgExt, $supportedTypes)){
+
+        $errors['image_error'] = "Image not supported.";
+
     }
+    else if(($image['size'] / 1000) > 2000){
+
+        $errors['image_error'] = "Image should be under 2000KB.";
+
+    }
+
 }
 
 
-if(count($errors) >0){
-  $_SESSION['form_errors'] = $errors;
-  header("Location: ../admin/banner.php");
-} else{
+// ================= ERROR CHECK =================
 
-if($cv['size'] >0){
+if(count($errors) > 0){
+
+    $_SESSION['form_errors'] = $errors;
+
+    header("Location: ../admin/banner.php");
+
+    exit();
+
+}
+else{
+
+    // ================= CREATE UPLOAD FOLDER =================
+
     if(!file_exists('../uploads')){
-      mkdir('../uploads');
+
+        mkdir('../uploads');
+
     }
 
 
-    $cvName= uniqid(). ".$cvExt";
-    $uploadFile = move_uploaded_file($cv['tmp_name'], "../uploads/". $cvName);
-  
-}
-}
+    $cvPath  = null;
+    $imgPath = null;
 
+
+    // ================= CV UPLOAD =================
+
+    if($cv['size'] > 0){
+
+        $cvName = uniqid() . "." . $cvExt;
+
+        $cvPath = "uploads/" . $cvName;
+
+        move_uploaded_file(
+            $cv['tmp_name'],
+            "../uploads/" . $cvName
+        );
+
+    }
+
+
+    // ================= IMAGE UPLOAD =================
+
+    if($image['size'] > 0){
+
+        $imgName = uniqid() . "." . $imgExt;
+
+        $imgPath = "uploads/" . $imgName;
+
+        move_uploaded_file(
+            $image['tmp_name'],
+            "../uploads/" . $imgName
+        );
+
+    }
+
+
+    // ================= INSERT QUERY =================
+
+    $query = "INSERT INTO `banners`
+    (
+        `job_type`,
+        `moto`,
+        `title`,
+        `short_description`,
+        `cta`,
+        `cta_links`,
+        `cv`,
+        `experience`,
+        `projects`,
+        `clients`,
+        `image`
+    )
+
+    VALUES
+    (
+        '$job_type',
+        '$moto',
+        '$title',
+        '$short_description',
+        '$cta_text',
+        '$cta_link',
+        '$cvPath',
+        '$exp',
+        '$projects',
+        '$clients',
+        '$imgPath'
+    )";
+
+
+    $res = mysqli_query($db, $query);
+
+
+    // ================= REDIRECT =================
+
+    header("Location: ../admin/banner.php");
+
+    exit();
+
+}
 
 ?>
